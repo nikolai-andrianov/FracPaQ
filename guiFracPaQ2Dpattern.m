@@ -283,7 +283,7 @@ if flag_triangle
         
     end ;
     
-    [ cY, cX, cI ] = getConnectivity(traces, segmentsxy, xMax, yMax) ;
+    [ cY, cX, cI ] = getConnectivity(flag_triangle, traces, segmentsxy, xMin, yMin, xMax, yMax) ;
     disp(' ') ;
     cTot = cY + cX + cI ;
     disp('Connectivity...') ;
@@ -308,16 +308,40 @@ if flag_triangle
     hold on ;
     triplot() ; 
     tripts(triData, '', 0, sColour) ; 
-    tripts(triLinesCL2, '', 1, sColour) ; 
-    tripts(triLinesCL357, '', 1, sColour) ; 
-    tripts(triLinesCL2(2,:), '\it C_L\rm = 2', 2, sColour) ; 
-    tripts(triLinesCL357(2,:), '\it C_L\rm = 3.57', 2, sColour) ; 
+    
+    plotCL = false;
+    if (plotCL)
+        tripts(triLinesCL2, '', 1, sColour) ; 
+        tripts(triLinesCL357, '', 1, sColour) ; 
+        tripts(triLinesCL2(2,:), '\it C_L\rm = 2', 2, sColour) ; 
+        tripts(triLinesCL357(2,:), '\it C_L\rm = 3.57', 2, sColour) ; 
+    else
+        disp('No plots CL=2 and CL=3.57..');
+    end
+    
     hold off ;
-    title({['Connectivity of trace segments, Y:X:I = ', ...
+    
+    if (flag_triangle == 1)
+        tline = 'Connectivity of trace segments, Y:X:I = ';
+    elseif (flag_triangle == 2)
+        tline = 'Connectivity of traces, Y:X:I = ';        
+    else
+        disp('ERROR: connectivity flag not defined..');
+        return;
+    end
+       
+    % Title with fractions of Y, X, I
+    title({[tline, ...
         num2str(cY/cTot, '%5.2f'), ':', ...
         num2str(cX/cTot, '%5.2f'), ':', ...
         num2str(cI/cTot, '%5.2f')];''}) ;
-    
+
+    % Title with values of Y, X, I
+%     title({[tline, ...
+%         num2str(cY, '%d'), ':', ...
+%         num2str(cX, '%d'), ':', ...
+%         num2str(cI, '%d')];''}) ;
+%     
     %   save to file
     guiPrint(f, 'FracPaQ2D_IYXtriangle') ;
     
@@ -362,7 +386,9 @@ if flag_intensitymap || flag_densitymap
         
         cmocean('thermal') ;
         
-        contourf(X2, Y2, Inew, nContours) ;
+        [C,h] = contourf(X2, Y2, Inew, nContours) ;
+        set(h,'LineColor','none');  % NA:
+
         axis on equal ;
         box on ;
         xlim([xMin xMax]) ;
@@ -407,7 +433,9 @@ if flag_intensitymap || flag_densitymap
         
         cmocean('thermal') ;
         
-        contourf(X2, Y2, Dnew, nContours) ;
+        [C,h] = contourf(X2, Y2, Dnew, nContours) ;                
+        set(h,'LineColor','none');  % NA:
+        
         axis on equal ;
         box on ;
         xlim([xMin xMax]) ;

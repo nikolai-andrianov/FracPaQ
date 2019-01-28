@@ -1,4 +1,4 @@
-function [ Y, X, I ] = getConnectivity(traces, segments, xMax, yMax) 
+function [ Y, X, I ] = getConnectivity(flag_triangle, traces, segments, xMin, yMin, xMax, yMax) 
 
 %% Copyright
 % Permission is hereby granted, free of charge, to any person obtaining a
@@ -19,6 +19,23 @@ function [ Y, X, I ] = getConnectivity(traces, segments, xMax, yMax)
 % DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
 % OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 % USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+% Keep a reference to the corresponding trace in segments 
+k = 0 ;
+for i = 1:length(traces)
+    for j = 1:traces(i).nSegments
+        k = k + 1 ;
+        segmentTrace(k) = i;
+    end
+end
+
+if (flag_triangle == 2)
+    connectivityTraces = true; 
+    disp('Plotting TRACES connectivity graph..');
+else
+    connectivityTraces = false; 
+    disp('Plotting SEGMENTS connectivity graph..');
+end
 
 Y = 0 ; 
 X = 0 ; 
@@ -42,6 +59,10 @@ for i = 1:size(segments,1)
 
         for j = i+1:size(segments,1) 
 
+            % Account for trace intersections only if the segments belong
+            % to different traces, and account for all segment intersections
+            if ((connectivityTraces && (segmentTrace(i) ~= segmentTrace(j))) || ~connectivityTraces)
+            
             %   check that the scan line is not the same as the matched line 
             if intScan.coincAdjacencyMatrix(1, j) < 1 
 
@@ -75,6 +96,8 @@ for i = 1:size(segments,1)
                 end ; 
 
             end ;
+            
+            end
 
         end ; 
 
@@ -82,7 +105,24 @@ for i = 1:size(segments,1)
     
 end ; 
 
-disp('Before intersection adjustment:') ; 
+% Get the coordinates of I nodes
+Ntr = size(traces,2);
+XI = zeros(Ntr*2, 2);
+for i = 1:Ntr
+    Nnt = length(traces(i).Node); % Number of nodes in traces
+    XI(2*i-1, 1) = traces(i).Node(1).x;
+    XI(2*i-1, 2) = traces(i).Node(1).y;
+    XI(2*i, 1)   = traces(i).Node(Nnt).x;
+    XI(2*i, 2)   = traces(i).Node(Nnt).y;    
+end
+
+% Remove duplicates just in case
+[XIU, iu, tmp] = unique(XI, 'stable', 'rows');
+Nip = size(XIU, 1);
+XI = reshape(XIU, Nip, 2);
+
+
+disp('Iinitial intersection count:') ; 
 disp(['I: ', num2str(I)]) ; 
 disp(['Y: ', num2str(Y)]) ; 
 disp(['X: ', num2str(X)]) ; 
@@ -92,57 +132,126 @@ disp(['X: ', num2str(X)]) ;
 %   segment; this is currently 3 'Y' nodes, but should be 1 'X' node
 if max(size(traces)) < max(size(segments))
 
-    for i = 1:nInt 
+    % Get to the columnwise coordinates
+    xint = xint';
+    yint = yint';
+    Xc = [xint, yint];
+    
+    % Intersections' coordinates without duplicates
+    [XU, iu, tmp] = unique(Xc, 'stable', 'rows');
+    Np = size(XU, 1);
+    XU = reshape(XU, Np, 2);
 
-        if ~isnan(xint(i)) && fint(i) == 'Y'
+    % For the trace connectivity case replace all Y nodes with X unless they
+    % coincide with I nodes
+    nodeType = fint(iu)';
+    if (connectivityTraces)
+        [XYI, ixyi, tmp] = intersect(XU, XI, 'rows');
+        indX = setdiff( [1:Np]', ixyi);
+        nodeTypeXYI = nodeType(ixyi);
+        nodeType(indX) = 'X';
+    end    
+    
+    % Get the number and coordinates of unique X and Y nodes
 
-            ix = find(xint == xint(i), nInt) ; 
-            iy = find(yint == yint(i), nInt) ; 
-
-            if length(ix) > 1 && length(iy) > 1  
-
-                Y = Y - length(ix) ; 
-                X = X + 1 ; 
-
-                %   make sure we only deal with each duplicate once 
-                xint(ix) = NaN ; 
-                yint(iy) = NaN ; 
-
-            end ;
-
-        end ; 
-
-    end ; 
+    indX = find(nodeType == 'X');
+    indY = find(nodeType == 'Y');
+    
+    X = length(indX);
+    Y = length(indY);
+    
+    debug = false;
+    dx = (max(XU(:,1)) - min(XU(:, 1))) / 200;
+    if (debug)
+        figure(1); 
+        hold on;         
+        hx = plot(XU(indX,1), XU(indX,2), 'o', 'Color', 'r', 'MarkerFaceColor', 'r', 'DisplayName', 'X'); 
+        tind = [1:length(indX)];
+        text(XU(indX,1)+dx, XU(indX,2), num2str(tind(:)), 'Color', 'r');        
+        hy = plot(XU(indY,1), XU(indY,2), 'o', 'Color', 'g', 'MarkerFaceColor', 'g', 'DisplayName','Y');
+        tind = [1:length(indY)];
+        text(XU(indY,1)+dx, XU(indY,2), num2str(tind(:)), 'Color', 'g');                
+    end   
+    
+%     % Replace the original implementation with the one below    
+%     for i = 1:nInt 
+% 
+%         if ~isnan(xint(i)) && fint(i) == 'Y'
+% 
+%             ix = find(xint == xint(i), nInt) ; 
+%             iy = find(yint == yint(i), nInt) ; 
+% 
+%             if length(ix) > 1 && length(iy) > 1  
+%                 
+%                 figure(1)
+%                 hold on
+%                 plot(xint(i), yint(i), 'o', 'Color', 'r')
+% 
+%                 Y = Y - length(ix) ; 
+%                 X = X + 1 ; 
+% 
+%                 %   make sure we only deal with each duplicate once 
+%                 xint(ix) = NaN ; 
+%                 yint(iy) = NaN ; 
+% 
+%             end ;
+% 
+%         end ; 
+% 
+%     end ; 
     
 end ;
 
-disp('After intersection adjustment:') ; 
+disp('After removing duplicates and adjustments Y->X for eventual trace connectivity:') ; 
 disp(['I: ', num2str(I)]) ; 
 disp(['Y: ', num2str(Y)]) ; 
 disp(['X: ', num2str(X)]) ; 
 
-%   also remove any I points that lie on the edge of the area; censoring 
-xMaxr = round(xMax) ; 
-yMaxr = round(yMax) ; 
-for i = 1:size(traces,2) 
+% Replace the original implementation with the one below
+% %   also remove any I points that lie on the edge of the area; censoring 
+% xMaxr = round(xMax) ; 
+% yMaxr = round(yMax) ; 
+% for i = 1:size(traces,2) 
+% 
+%     maxNode = traces(i).nNodes ; 
+%     
+%     if round(traces(i).Node(1).x) == xMin || round(traces(i).Node(1).x) == xMaxr
+%         I = I - 1 ; 
+%     elseif round(traces(i).Node(1).y) == yMin || round(traces(i).Node(1).y) == yMaxr
+%         I = I - 1 ; 
+%     elseif round(traces(i).Node(maxNode).x) == xMin || round(traces(i).Node(maxNode).x) == xMaxr
+%         I = I - 1 ; 
+%     elseif round(traces(i).Node(maxNode).y) == xMax || round(traces(i).Node(maxNode).y) == yMaxr
+%         I = I - 1 ; 
+%     else 
+%         continue ; 
+%     end ; 
+%         
+% end ; 
 
-    maxNode = traces(i).nNodes ; 
-    
-    if round(traces(i).Node(1).x) == 0 || round(traces(i).Node(1).x) == xMaxr 
-        I = I - 1 ; 
-    elseif round(traces(i).Node(1).y) == 0 || round(traces(i).Node(1).y) == yMaxr
-        I = I - 1 ; 
-    elseif round(traces(i).Node(maxNode).x) == 0 || round(traces(i).Node(maxNode).x) == xMaxr
-        I = I - 1 ; 
-    elseif round(traces(i).Node(maxNode).y) == 0 || round(traces(i).Node(maxNode).y) == yMaxr
-        I = I - 1 ; 
-    else 
-        continue ; 
-    end ; 
-        
-end ; 
+% Excluding the I nodes lying on boundaries
+ib = find( (XI(:,1) == xMin) | (XI(:,1) == xMax) | (XI(:,2) == yMin) | (XI(:,2) == yMax));
+Nip = size(XI, 1);
+indI = setdiff( [1:Nip]', ib);
 
-disp('After censoring:') ; 
+% Exclude the I nodes coinciding with X and Y nodes
+XIi= setdiff(XI(indI,:), XU(indX,:), 'rows');
+XI = setdiff(XIi, XU(indY,:), 'rows');
+
+I = size(XI, 1);
+
+if (debug)
+    figure(1); 
+    hold on;         
+    hi = plot(XI(:,1), XI(:,2), 'o', 'Color', 'b', 'MarkerFaceColor', 'b', 'DisplayName','I'); 
+    tind = [1:length(XI(:,1))];
+    text(XI(:,1)+dx, XI(:,2), num2str(tind(:)), 'Color', 'b');        
+    legend([hx, hy, hi])
+end   
+
+
+
+disp('After removing boundary I nodes:') ; 
 disp(['I: ', num2str(I)]) ; 
 disp(['Y: ', num2str(Y)]) ; 
 disp(['X: ', num2str(X)]) ; 
